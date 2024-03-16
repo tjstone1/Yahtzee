@@ -1,0 +1,1 @@
+{"mappings":"AAAA;;;;;AAKA","sources":["Yahtzee/src/style.css"],"sourcesContent":["body {\n  margin: 0;\n  box-sizing: border-box;\n}\n\n.dice {\n  display: grid;\n  place-items: center;\n  width: 40px;\n  height: 40px;\n  background-color: #ffeedd;\n}\n"],"names":[],"version":3,"file":"index.502f99e4.css.map","sourceRoot":"/__parcel_source_root/"}
