@@ -3048,6 +3048,7 @@ function checkScores(scores) {
         }, 0);
         switch(duplicates){
             case 4:
+                threeOAK = sum(scores);
                 fourOAK = sum(scores);
                 break;
             case 3:
@@ -3188,7 +3189,35 @@ function howMany(subject, rollResult) {
     }, 0);
     return n;
 }
-function findSequence(scores, length) {}
+function findSequences(diceRolls, length) {
+    // Sort the dice rolls
+    diceRolls.sort((a, b)=>a - b);
+    let minMissing = Infinity;
+    let resultSequence = [];
+    // Find the minimum and maximum values in diceRolls
+    const minDiceRoll = diceRolls[0];
+    const maxDiceRoll = diceRolls[diceRolls.length - 1];
+    // Generate sequences starting from each value in the range of diceRolls
+    for(let i = minDiceRoll; i <= maxDiceRoll - length + 1; i++){
+        let sequence = [];
+        let current = i;
+        // Generate a sequence starting from the current value
+        for(let j = 0; j < length; j++)sequence.push(current++);
+        // Calculate the missing values in the sequence
+        let missing = countMissing(sequence);
+        // Update result if the current sequence has fewer missing values
+        if (missing < minMissing) {
+            minMissing = missing;
+            resultSequence = sequence.slice(); // Make a copy of the sequence
+        }
+    }
+    console.log(resultSequence);
+}
+function countMissing(sequence) {
+    let missingCount = 0;
+    for(let i = 0; i < sequence.length - 1; i++)if (sequence[i + 1] - sequence[i] > 1) missingCount += sequence[i + 1] - sequence[i] - 1;
+    return missingCount;
+}
 function firstExpectation(entry, rollResult) {
     let subject = 0;
     let x;
@@ -3214,14 +3243,11 @@ function firstExpectation(entry, rollResult) {
                         value: 50,
                         subject: 0
                     };
-                    if (score == 6) dice = 5 - sixes;
-                    else dice = 5 - multiplier - sixes;
-                    subject = 6;
-                    x = subject * n + (5 - n) * 6;
-                    p = (1 / 6) ** dice;
-                    i = 5 - dice;
-                    j = dice;
-                    break switchCase;
+                    return {
+                        key: entry.key,
+                        value: sum(rollResult),
+                        subject: 0
+                    };
                 }
                 //if not achieved
                 if (score * n > max) {
@@ -3244,41 +3270,40 @@ function firstExpectation(entry, rollResult) {
                 subject: 0
             };
             let highestValue = 0;
-            let highestN = 0;
             let candidates = [];
             for (const score of uniqueScores){
                 const n = howMany(score, rollResult);
-                if (n >= 2) {
-                    if (score > highestValue) {
-                        highestValue = score;
-                        highestN = n;
-                    }
-                    candidates.push({
-                        subject: score,
-                        n: n
-                    });
-                }
+                if (n >= 2) candidates.push({
+                    subject: score,
+                    n: n
+                });
+                else if (score > highestValue) highestValue = score;
             }
             console.log(candidates, "cand");
             if (candidates.length == 2) {
-                subject = highestValue;
+                subject = Math.max(candidates[0].subject, candidates[1].subject);
                 i = 4;
                 exp = 1;
+                j = 2;
             } else if (candidates.length == 1) {
                 subject = highestValue;
-                i = highestN;
+                i = 4 - Math.min(candidates[0].n, 3);
                 exp = 5 - i;
+                j = i + 1;
             } else {
-                subject = 6;
-                i = howMany(6, rollResult);
+                subject = highestValue;
+                const secondHighest = uniqueScores.filter((value)=>value !== subject).sort()[-1];
+                i = 2;
+                j = 5;
                 exp = 5 - i;
             }
-            j = 5;
+            console.log(highestValue, subject, i);
             x = 25;
             p = (1 / 6) ** exp;
             break;
         case "small":
         case "large":
+            findSequences(uniqueScores.sort(), 4);
             return {
                 key: entry.key,
                 value: -1,
@@ -3286,6 +3311,8 @@ function firstExpectation(entry, rollResult) {
             };
         default:
             [subject, x] = scoreRules[entry.key];
+            i = howMany(subject, rollResult);
+            j = 5;
             break;
     }
     if (subject !== 0) {
