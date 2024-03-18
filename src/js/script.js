@@ -1,5 +1,3 @@
-import { RootRef } from "@material-ui/core";
-
 const button = document.getElementById("roll-btn");
 const scoreCard = document.getElementById("score-card");
 const scoreRows = scoreCard.children[0].children;
@@ -18,25 +16,35 @@ let rolls = 3;
 let previewValues = [];
 
 function handleSelect(selection) {
-  if (!player) return;
-  const target = cells.find((cell) => {
-    if (cell === selection) {
-      return cell;
-    }
-  });
+  if (!player || previewValues.length == 0) return;
+  select(selection);
+}
+function select(selection) {
+  console.log("prev:", previewValues, player, selection);
+  let target;
 
+  player
+    ? (target = cells.find((cell) => {
+        if (cell === selection) {
+          return cell;
+        }
+      }))
+    : (target = selection);
+  console.log(target, target.innerText, previewValues);
   if (!target.innerText) {
     target.innerText = 0;
   } else if (!previewValues.includes(target)) {
+    console.log("not found");
     return;
   } else {
+    console.log("found");
     previewValues = previewValues.filter((cell) => {
       if (cell !== target) {
         return cell;
       }
     });
 
-    scores["player"] += parseInt(target.innerText);
+    scores[player ? "player" : "cpu"] += parseInt(target.innerText);
   }
   clearPreviews(previewValues);
   previewValues = [];
@@ -403,9 +411,6 @@ function firstExpectation(entry, rollResult) {
         j = 5;
       } else {
         subject = highestValue;
-        const secondHighest = uniqueScores
-          .filter((value) => value !== subject)
-          .sort()[-1];
         i = 2;
         j = 5;
         exp = 5 - i;
@@ -446,7 +451,6 @@ function firstExpectation(entry, rollResult) {
   }
 
   if (subject !== 0) {
-    //Upper section logic - finds and ranks expected outcomes
     if (!i)
       i = rollResult.reduce((a, b) => {
         if (b == subject) {
@@ -479,35 +483,32 @@ function firstExpectation(entry, rollResult) {
       value: Math.abs(p2) * x,
       subject: subject,
     };
-  } else {
-    //lower section logic - finds and ranks expected outcomes
-    return { key: entry.key, value: 0, subject, subject };
   }
 }
 
 function cpuTurn() {
   const rollResult = roll();
-  const rollScore = checkScores(rollResult);
 
   const allScores = {
-    ones: rollScore[0],
-    twos: rollScore[1],
-    threes: rollScore[2],
-    fours: rollScore[3],
-    fives: rollScore[4],
-    sixes: rollScore[5],
-    threeOAK: rollScore[8],
-    fourOAK: rollScore[9],
-    full: rollScore[10],
-    small: rollScore[11],
-    large: rollScore[12],
-    chance: rollScore[13],
-    yahtzee: rollScore[14],
+    ones: scoreRows[1].children[2].innerText,
+    twos: scoreRows[2].children[2].innerText,
+    threes: scoreRows[3].children[2].innerText,
+    fours: scoreRows[4].children[2].innerText,
+    fives: scoreRows[5].children[2].innerText,
+    sixes: scoreRows[6].children[2].innerText,
+    threeOAK: scoreRows[9].children[2].innerText,
+    fourOAK: scoreRows[10].children[2].innerText,
+    full: scoreRows[11].children[2].innerText,
+    small: scoreRows[12].children[2].innerText,
+    large: scoreRows[13].children[2].innerText,
+    chance: scoreRows[14].children[2].innerText,
+    yahtzee: scoreRows[15].children[2].innerText,
   };
 
   const expectations = [];
   const entries = Object.entries(allScores).reduce((acc, [key, value]) => {
-    key !== "chance" && acc.push({ key: key, value: value });
+    key !== "chance" &&
+      acc.push({ key: key, value: value !== "0" ? parseInt(value) : 0 });
 
     return acc;
   }, []);
@@ -524,10 +525,35 @@ function cpuTurn() {
     for (const expectation of expectations) {
       if (expectation.value >= max) {
         max = expectation.value;
-        bestMove = [expectation.key, expectation.subject];
+        bestMove = expectation;
       }
     }
   }
   console.log(expectations);
-  console.log(bestMove);
+  doBestMove(bestMove);
+}
+
+const cpuCells = {
+  ones: scoreRows[1].children[2],
+  twos: scoreRows[2].children[2],
+  threes: scoreRows[3].children[2],
+  fours: scoreRows[4].children[2],
+  fives: scoreRows[5].children[2],
+  sixes: scoreRows[6].children[2],
+  threeOAK: scoreRows[9].children[2],
+  fourOAK: scoreRows[10].children[2],
+  full: scoreRows[11].children[2],
+  small: scoreRows[12].children[2],
+  large: scoreRows[13].children[2],
+  chance: scoreRows[14].children[2],
+  yahtzee: scoreRows[15].children[2],
+};
+function doBestMove(bestMove) {
+  const [move, lock] = [bestMove.key, bestMove.subject];
+
+  if (lock == 0) {
+    console.log(cpuCells[move]);
+    select(cpuCells[move]);
+  }
+  console.log(move, lock);
 }
