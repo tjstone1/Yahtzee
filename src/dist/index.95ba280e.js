@@ -3190,33 +3190,42 @@ function howMany(subject, rollResult) {
     return n;
 }
 function findSequences(diceRolls, length) {
-    // Sort the dice rolls
-    diceRolls.sort((a, b)=>a - b);
-    let minMissing = Infinity;
+    let minMissing = {
+        count: Infinity,
+        values: []
+    };
     let resultSequence = [];
-    // Find the minimum and maximum values in diceRolls
     const minDiceRoll = diceRolls[0];
     const maxDiceRoll = diceRolls[diceRolls.length - 1];
-    // Generate sequences starting from each value in the range of diceRolls
-    for(let i = minDiceRoll; i <= maxDiceRoll - length + 1; i++){
+    const startValue = Math.max(1, minDiceRoll - (length - diceRolls.length));
+    const endValue = Math.min(6, maxDiceRoll + (length - diceRolls.length));
+    for(let i = startValue; i <= endValue - length + 1; i++){
         let sequence = [];
         let current = i;
-        // Generate a sequence starting from the current value
         for(let j = 0; j < length; j++)sequence.push(current++);
-        // Calculate the missing values in the sequence
-        let missing = countMissing(sequence);
-        // Update result if the current sequence has fewer missing values
-        if (missing < minMissing) {
+        let missing = countMissing(sequence, diceRolls);
+        if (missing.count < minMissing.count) {
             minMissing = missing;
-            resultSequence = sequence.slice(); // Make a copy of the sequence
+            resultSequence = sequence.slice();
         }
     }
-    console.log(resultSequence);
+    return [
+        resultSequence,
+        minMissing
+    ];
 }
-function countMissing(sequence) {
+function countMissing(sequence, diceRolls) {
     let missingCount = 0;
-    for(let i = 0; i < sequence.length - 1; i++)if (sequence[i + 1] - sequence[i] > 1) missingCount += sequence[i + 1] - sequence[i] - 1;
-    return missingCount;
+    let missingValues = [];
+    for(let i = 0; i < sequence.length; i++)if (!diceRolls.includes(sequence[i])) {
+        missingValues.push(sequence[i]);
+        missingCount++;
+    }
+    const missing = {
+        count: missingCount,
+        values: missingValues
+    };
+    return missing;
 }
 function firstExpectation(entry, rollResult) {
     let subject = 0;
@@ -3226,6 +3235,8 @@ function firstExpectation(entry, rollResult) {
     let dice = 5;
     let uniqueScores = getUniqueScores(rollResult);
     let p = 0;
+    let sequence = [];
+    let gaps;
     switchCase: switch(entry.key){
         case "threeOAK":
         case "fourOAK":
@@ -3260,7 +3271,7 @@ function firstExpectation(entry, rollResult) {
             x = multiplier == 5 ? 50 : subject * multiplier + (5 - multiplier) * 3.5;
             i = maxn;
             j = multiplier - maxn;
-            p = (1 / 6) ** j;
+            p = (1 / 6) ** dice;
             break;
         case "full":
             console.log("unique", uniqueScores.length, uniqueScores);
@@ -3287,9 +3298,9 @@ function firstExpectation(entry, rollResult) {
                 j = 2;
             } else if (candidates.length == 1) {
                 subject = highestValue;
-                i = 4 - Math.min(candidates[0].n, 3);
+                i = candidates[0].n + 1;
                 exp = 5 - i;
-                j = i + 1;
+                j = 5;
             } else {
                 subject = highestValue;
                 const secondHighest = uniqueScores.filter((value)=>value !== subject).sort()[-1];
@@ -3302,13 +3313,23 @@ function firstExpectation(entry, rollResult) {
             p = (1 / 6) ** exp;
             break;
         case "small":
+            [sequence, gaps] = findSequences(uniqueScores.sort(), 4);
         case "large":
-            findSequences(uniqueScores.sort(), 4);
-            return {
+            if (sequence.length == 0) [sequence, gaps] = findSequences(uniqueScores.sort(), 5);
+            console.log(sequence, gaps);
+            if (gaps.count == 0) return {
                 key: entry.key,
-                value: -1,
+                value: sequence.length == 4 ? 30 : 40,
                 subject: 0
             };
+            const n = sequence.length;
+            subject = gaps && gaps.values ? gaps.values : 3;
+            x = sequence.length == 4 ? 30 : 40;
+            i = 5 - gaps.count;
+            j = 5;
+            p = (1 / 6) ** gaps.count;
+            console.log(x, i, j, p);
+            break;
         default:
             [subject, x] = scoreRules[entry.key];
             i = howMany(subject, rollResult);
