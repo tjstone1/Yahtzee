@@ -2935,9 +2935,6 @@ process.umask = function() {
 };
 
 },{}],"c195p":[function(require,module,exports) {
-var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
-parcelHelpers.defineInteropFlag(exports);
-parcelHelpers.export(exports, "roll", ()=>roll);
 const button = document.getElementById("roll-btn");
 const scoreCard = document.getElementById("score-card");
 const scoreRows = scoreCard.children[0].children;
@@ -2958,33 +2955,22 @@ let cells = [];
 let rolls = 3;
 let previewValues = [];
 function handleSelect(selection) {
-    if (!player || previewValues.length == 0) return;
+    if (!player || rolls == 3) return;
     select(selection);
 }
-function select(selection) {
-    console.log("prev:", previewValues, player, selection);
-    let target;
-    player ? target = cells.find((cell)=>{
-        if (cell === selection) return cell;
-    }) : target = selection;
-    console.log(target, target.innerText, previewValues);
-    if (!target.innerText) target.innerText = 0;
-    else if (!previewValues.includes(target)) {
+function select(target1) {
+    if (!target1.innerText) target1.innerText = 0;
+    else if (!previewValues.includes(target1)) {
         console.log("not found");
         return;
     } else {
         console.log("found");
         previewValues = previewValues.filter((cell)=>{
-            if (cell !== target) return cell;
+            if (cell !== target1) return cell;
         });
-        scores[player ? "player" : "cpu"] += parseInt(target.innerText);
+        scores[player ? "player" : "cpu"] += parseInt(target1.innerText);
     }
-    clearPreviews(previewValues);
-    previewValues = [];
-    player = !player;
-    rolls = 3;
-    counterDisplay.innerText = `Rolls remaining: ${rolls}`;
-    if (rolls === 3 && !player) cpuTurn();
+    togglePlayer();
 }
 for(let i = 0; i < 17; i++){
     if (i === 0 || i === 7 || i === 8 || i === 16) continue;
@@ -2992,11 +2978,27 @@ for(let i = 0; i < 17; i++){
     cell.addEventListener("click", (e)=>handleSelect(e.target));
     cells.push(cell);
 }
+function togglePlayer() {
+    clearPreviews(previewValues);
+    previewValues = [];
+    player = !player;
+    rolls = 3;
+    counterDisplay.innerText = `Rolls remaining: ${rolls}`;
+    resetDice();
+    if (!player) cpuTurn();
+}
+function resetDice() {
+    for(let i = 0; i < 5; i++){
+        dice[i].value = i + 1;
+        dice[i].element.innerText = i + 1;
+        dice[i].locked = false;
+    }
+}
 function toggleLock(index) {
     dice[index].locked = !dice[index].locked;
 }
 function handleToggleLock(index) {
-    if (!player) return;
+    if (!player || rolls == 3) return;
     toggleLock(index);
 }
 function isConsecutive(scores, length) {
@@ -3282,7 +3284,7 @@ function firstExpectation(entry, rollResult) {
             p = (1 / 6) ** dice;
             break;
         case "full":
-            console.log("unique", uniqueScores.length, uniqueScores);
+            console.log("full unique", uniqueScores);
             if (uniqueScores.length == 2 && (howMany(uniqueScores[0], rollResult) == 2 || howMany(uniqueScores[0], rollResult) == 3)) return {
                 key: entry.key,
                 value: 25,
@@ -3298,7 +3300,6 @@ function firstExpectation(entry, rollResult) {
                 });
                 else if (score > highestValue) highestValue = score;
             }
-            console.log(candidates, "cand");
             if (candidates.length == 2) {
                 subject = Math.max(candidates[0].subject, candidates[1].subject);
                 i = 4;
@@ -3306,7 +3307,7 @@ function firstExpectation(entry, rollResult) {
                 j = 2;
             } else if (candidates.length == 1) {
                 subject = highestValue;
-                i = candidates[0].n + 1;
+                i = Math.min(candidates[0].n, 3) + 1;
                 exp = 5 - i;
                 j = 5;
             } else {
@@ -3315,31 +3316,32 @@ function firstExpectation(entry, rollResult) {
                 j = 5;
                 exp = 5 - i;
             }
-            console.log(highestValue, subject, i);
             x = 25;
             p = (1 / 6) ** exp;
+            console.log("full subject", subject);
             break;
         case "small":
             [sequence, gaps] = findSequences(uniqueScores.sort(), 4);
         case "large":
             if (sequence.length == 0) [sequence, gaps] = findSequences(uniqueScores.sort(), 5);
-            console.log(sequence, gaps);
             if (gaps.count == 0) return {
                 key: entry.key,
                 value: sequence.length == 4 ? 30 : 40,
                 subject: 0
             };
             const n = sequence.length;
-            subject = gaps && gaps.values ? gaps.values : 3;
+            subject = sequence.filter((item)=>!gaps.values.includes(item));
             x = sequence.length == 4 ? 30 : 40;
             i = 5 - gaps.count;
             j = 5;
             p = (1 / 6) ** gaps.count;
-            console.log(x, i, j, p);
             break;
         default:
-            [subject, x] = scoreRules[entry.key];
-            i = howMany(subject, rollResult);
+            [target, x] = scoreRules[entry.key];
+            i = howMany(target, rollResult);
+            subject = Array.from({
+                length: 5 - i
+            }, ()=>target);
             j = 5;
             break;
     }
@@ -3369,45 +3371,65 @@ function firstExpectation(entry, rollResult) {
         };
     }
 }
+let scoreTypes = [
+    "ones",
+    "twos",
+    "threes",
+    "fours",
+    "fives",
+    "sixes",
+    "threeOAK",
+    "fourOAK",
+    "full",
+    "small",
+    "large",
+    "chance",
+    "yahtzee"
+];
 function cpuTurn() {
-    const rollResult = roll();
-    const allScores = {
-        ones: scoreRows[1].children[2].innerText,
-        twos: scoreRows[2].children[2].innerText,
-        threes: scoreRows[3].children[2].innerText,
-        fours: scoreRows[4].children[2].innerText,
-        fives: scoreRows[5].children[2].innerText,
-        sixes: scoreRows[6].children[2].innerText,
-        threeOAK: scoreRows[9].children[2].innerText,
-        fourOAK: scoreRows[10].children[2].innerText,
-        full: scoreRows[11].children[2].innerText,
-        small: scoreRows[12].children[2].innerText,
-        large: scoreRows[13].children[2].innerText,
-        chance: scoreRows[14].children[2].innerText,
-        yahtzee: scoreRows[15].children[2].innerText
-    };
-    const expectations = [];
-    const entries = Object.entries(allScores).reduce((acc, [key, value])=>{
-        key !== "chance" && acc.push({
-            key: key,
-            value: value !== "0" ? parseInt(value) : 0
-        });
-        return acc;
-    }, []);
-    let bestMove = [];
-    if (rolls === 2) {
-        for (const entry of entries){
-            const expectation = firstExpectation(entry, rollResult);
-            expectations.push(expectation);
+    let availableTypes = scoreTypes;
+    while(!player && rolls > 0){
+        const rollResult = roll();
+        console.log(rolls, "ROLL");
+        const allScores = {
+            ones: scoreRows[1].children[2].innerText,
+            twos: scoreRows[2].children[2].innerText,
+            threes: scoreRows[3].children[2].innerText,
+            fours: scoreRows[4].children[2].innerText,
+            fives: scoreRows[5].children[2].innerText,
+            sixes: scoreRows[6].children[2].innerText,
+            threeOAK: scoreRows[9].children[2].innerText,
+            fourOAK: scoreRows[10].children[2].innerText,
+            full: scoreRows[11].children[2].innerText,
+            small: scoreRows[12].children[2].innerText,
+            large: scoreRows[13].children[2].innerText,
+            chance: scoreRows[14].children[2].innerText,
+            yahtzee: scoreRows[15].children[2].innerText
+        };
+        for (const key of Object.keys(allScores))if (!availableTypes.includes(key)) delete allScores[key];
+        const expectations = [];
+        const entries = Object.entries(allScores).reduce((acc, [key, value])=>{
+            key !== "chance" && acc.push({
+                key: key,
+                value: value !== "0" ? parseInt(value) : 0
+            });
+            return acc;
+        }, []);
+        let bestMove = [];
+        if (rolls >= 0) {
+            for (const entry of entries){
+                const expectation = firstExpectation(entry, rollResult);
+                expectations.push(expectation);
+            }
+            let max = 0;
+            for (const expectation of expectations)if (expectation.value >= max) {
+                max = expectation.value;
+                bestMove = expectation;
+            }
         }
-        let max = 0;
-        for (const expectation of expectations)if (expectation.value >= max) {
-            max = expectation.value;
-            bestMove = expectation;
-        }
+        console.log(expectations);
+        doBestMove(bestMove, availableTypes);
     }
-    console.log(expectations);
-    doBestMove(bestMove);
 }
 const cpuCells = {
     ones: scoreRows[1].children[2],
@@ -3424,47 +3446,40 @@ const cpuCells = {
     chance: scoreRows[14].children[2],
     yahtzee: scoreRows[15].children[2]
 };
-function doBestMove(bestMove) {
+function doBestMove(bestMove, availableTypes) {
     const [move, lock] = [
         bestMove.key,
         bestMove.subject
     ];
-    if (lock == 0) {
-        console.log(cpuCells[move]);
-        select(cpuCells[move]);
+    console.log(move, lock, typeof lock);
+    if (typeof lock == "number" && lock == 0 || typeof lock == "object" && lock.includes == 0) select(cpuCells[move]);
+    else if (rolls == 0) togglePlayer();
+    else {
+        if (typeof lock == "number") {
+            console.log("lock", lock);
+            console.log("dice", dice);
+            const toLock = dice.find((die)=>die.value == lock);
+            console.log(dice);
+            console.log("NUM LOCK", lock, toLock);
+            console.log(toLock);
+            toLock.locked = true;
+        } else {
+            let diceClones = [
+                ...dice
+            ];
+            console.log("lock array", lock);
+            for (const value of lock){
+                console.log("dice", diceClones);
+                const toLock = diceClones.find((die)=>die.value == value);
+                toLock.locked = true;
+                diceClones = diceClones.filter((die)=>die.element !== toLock.element);
+            }
+        }
+        console.log(rolls);
     }
+    availableTypes = availableTypes.filter((type)=>type !== move);
     console.log(move, lock);
 }
-
-},{"@parcel/transformer-js/src/esmodule-helpers.js":"hZ54O"}],"hZ54O":[function(require,module,exports) {
-exports.interopDefault = function(a) {
-    return a && a.__esModule ? a : {
-        default: a
-    };
-};
-exports.defineInteropFlag = function(a) {
-    Object.defineProperty(a, "__esModule", {
-        value: true
-    });
-};
-exports.exportAll = function(source, dest) {
-    Object.keys(source).forEach(function(key) {
-        if (key === "default" || key === "__esModule" || dest.hasOwnProperty(key)) return;
-        Object.defineProperty(dest, key, {
-            enumerable: true,
-            get: function() {
-                return source[key];
-            }
-        });
-    });
-    return dest;
-};
-exports.export = function(dest, destName, get) {
-    Object.defineProperty(dest, destName, {
-        enumerable: true,
-        get: get
-    });
-};
 
 },{}]},["kiCJ3","9fDFb","c195p"], "c195p", "parcelRequire94c2")
 
