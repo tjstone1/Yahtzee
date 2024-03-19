@@ -15,6 +15,7 @@ let scores = { player: 0, cpu: 0 };
 let cells = [];
 let rolls = 3;
 let previewValues = [];
+let turn = 1;
 
 function handleSelect(selection) {
   if (!player || rolls == 3) return;
@@ -28,6 +29,7 @@ function select(target) {
     return;
   } else {
     console.log("found");
+    target.style.color = "black";
     previewValues = previewValues.filter((cell) => {
       if (cell !== target) {
         return cell;
@@ -59,6 +61,10 @@ function togglePlayer() {
 
   if (!player) {
     cpuTurn();
+  } else if (turn == 13) {
+    console.log("DONE");
+  } else {
+    turn++;
   }
 }
 
@@ -67,11 +73,17 @@ function resetDice() {
     dice[i].value = i + 1;
     dice[i].element.innerText = i + 1;
     dice[i].locked = false;
+    dice[i].element.style.backgroundColor = "#ffeedd";
   }
 }
 
 function toggleLock(index) {
   dice[index].locked = !dice[index].locked;
+  if (dice[index].locked) {
+    dice[index].element.style.backgroundColor = "red";
+  } else {
+    dice[index].element.style.backgroundColor = "#ffeedd";
+  }
 }
 
 function handleToggleLock(index) {
@@ -110,6 +122,7 @@ function showAvailableMoves(scores) {
   for (const score of scores) {
     if (!scoreRows[i].cells[col].innerText && score > 0) {
       previewValues.push(scoreRows[i].cells[col]);
+      scoreRows[i].cells[col].style.color = "red";
       scoreRows[i].cells[col].innerText = score;
     }
     i++;
@@ -328,7 +341,7 @@ function countMissing(sequence, diceRolls) {
   return missing;
 }
 
-function firstExpectation(entry, rollResult) {
+function getExpectations(entry, rollResult) {
   let subject = 0;
   let x;
   let i;
@@ -381,7 +394,6 @@ function firstExpectation(entry, rollResult) {
 
       break;
     case "full":
-      console.log("full unique", uniqueScores);
       if (
         uniqueScores.length == 2 &&
         (howMany(uniqueScores[0], rollResult) == 2 ||
@@ -423,7 +435,6 @@ function firstExpectation(entry, rollResult) {
 
       x = 25;
       p = (1 / 6) ** exp;
-      console.log("full subject", subject);
       break;
     case "small":
       [sequence, gaps] = findSequences(uniqueScores.sort(), 4);
@@ -434,7 +445,7 @@ function firstExpectation(entry, rollResult) {
       if (gaps.count == 0) {
         return {
           key: entry.key,
-          value: sequence.length == 4 ? 30 : 40,
+          value: entry.key == "small" ? 30 : 40,
           subject: 0,
         };
       }
@@ -469,25 +480,36 @@ function firstExpectation(entry, rollResult) {
     if (p == 0) {
       p = (1 / 6) ** j;
     }
-
+    let pC = 0;
     let p2 = 0;
-    for (let k = 1; k <= dice; k++) {
-      const Ci = factorialize(i) / (factorialize(k) * factorialize(i - k));
-      let pm = p * k;
-      let pnm = (1 - p) ** (i - k);
-      const pCi = Ci * pm * pnm;
-      const Cj = factorialize(k) / (factorialize(j) * factorialize(k - j));
-      pm = p * j;
-      pnm = (1 - p) ** (k - j);
-      const pCj = Cj * pm * pnm;
-      p2 += pCi * pCj;
+    if (rolls == 2) {
+      for (let k = 1; k <= 5; k++) {
+        const pCi = calculatepC(p, i, k);
+        const pCj = calculatepC(p, k, j);
+        pC += pCi * pCj;
+      }
+    } else if (rolls == 1) {
+      for (let k = 1; k <= i; k++) {
+        const pCij = calculatepC(p, i, j);
+        pC += pCij;
+      }
     }
+    p2 = pC;
+
     return {
       key: entry.key,
       value: Math.abs(p2) * x,
       subject: subject,
     };
   }
+}
+
+function calculatepC(p, a, b) {
+  const c = factorialize(a) / (factorialize(b) * factorialize(a - b));
+  let pm = p * b;
+  let pnm = (1 - p) ** (a - b);
+  const pC = c * pm * pnm;
+  return pC;
 }
 
 let scoreTypes = [
@@ -506,12 +528,12 @@ let scoreTypes = [
   "yahtzee",
 ];
 
+let usedTypes = [];
+
 function cpuTurn() {
-  let availableTypes = scoreTypes;
   while (!player && rolls > 0) {
     const rollResult = roll();
-    console.log(rolls, "ROLL");
-    const allScores = {
+    let allScores = {
       ones: scoreRows[1].children[2].innerText,
       twos: scoreRows[2].children[2].innerText,
       threes: scoreRows[3].children[2].innerText,
@@ -527,28 +549,33 @@ function cpuTurn() {
       yahtzee: scoreRows[15].children[2].innerText,
     };
 
-    for (const key of Object.keys(allScores)) {
-      if (!availableTypes.includes(key)) {
-        delete allScores[key];
-      }
-    }
+    allScores = Object.keys(allScores)
+      .filter((key) => !usedTypes.includes(key))
+      .reduce((newObj, key) => {
+        newObj[key] = allScores[key];
+        return newObj;
+      }, {});
 
     const expectations = [];
     const entries = Object.entries(allScores).reduce((acc, [key, value]) => {
-      key !== "chance" &&
-        acc.push({ key: key, value: value !== "0" ? parseInt(value) : 0 });
+      rolls > 0
+        ? key !== "chance" &&
+          acc.push({ key: key, value: value !== "0" ? parseInt(value) : 0 })
+        : acc.push({ key: key, value: value !== "0" ? parseInt(value) : 0 });
 
       return acc;
     }, []);
 
-    let bestMove = [];
+    console.log("entries", entries);
 
-    if (rolls >= 0) {
+    let bestMove;
+
+    if (rolls > 0) {
       for (const entry of entries) {
-        const expectation = firstExpectation(entry, rollResult);
+        const expectation = getExpectations(entry, rollResult);
         expectations.push(expectation);
       }
-
+      bestMove = expectations[0].key;
       let max = 0;
       for (const expectation of expectations) {
         if (expectation.value >= max) {
@@ -556,9 +583,23 @@ function cpuTurn() {
           bestMove = expectation;
         }
       }
+    } else {
+      console.log("dead", !bestMove, bestMove);
+      let max = 0;
+      for (const key of Object.keys(allScores)) {
+        if (allScores[key] > max) {
+          max = allScores[key];
+          bestMove = { key: key, value: max, subject: 0 };
+        }
+      }
+      if (!bestMove) {
+        let key = Object.keys(allScores)[0];
+        console.log("key", key);
+        bestMove = { key: key, value: allScores[key] || 0, subject: 0 };
+      }
     }
-    console.log(expectations);
-    doBestMove(bestMove, availableTypes);
+    console.log(bestMove.key, bestMove.value, bestMove.subject);
+    doBestMove(bestMove);
   }
 }
 
@@ -578,39 +619,30 @@ const cpuCells = {
   yahtzee: scoreRows[15].children[2],
 };
 
-function doBestMove(bestMove, availableTypes) {
+function doBestMove(bestMove) {
+  console.log(usedTypes, "used");
   const [move, lock] = [bestMove.key, bestMove.subject];
-  console.log(move, lock, typeof lock);
 
   if (
     (typeof lock == "number" && lock == 0) ||
     (typeof lock == "object" && lock.includes == 0)
   ) {
+    usedTypes.push(move);
     select(cpuCells[move]);
   } else if (rolls == 0) {
     togglePlayer();
   } else {
     if (typeof lock == "number") {
-      console.log("lock", lock);
-      console.log("dice", dice);
       const toLock = dice.find((die) => die.value == lock);
-      console.log(dice);
-      console.log("NUM LOCK", lock, toLock);
-      console.log(toLock);
       toLock.locked = true;
     } else {
       let diceClones = [...dice];
-      console.log("lock array", lock);
 
       for (const value of lock) {
-        console.log("dice", diceClones);
         const toLock = diceClones.find((die) => die.value == value);
         toLock.locked = true;
         diceClones = diceClones.filter((die) => die.element !== toLock.element);
       }
     }
-    console.log(rolls);
   }
-  availableTypes = availableTypes.filter((type) => type !== move);
-  console.log(move, lock);
 }
